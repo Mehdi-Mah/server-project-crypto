@@ -1,11 +1,11 @@
 # Utiliser une image officielle Node.js
-FROM node:18
+FROM node:20
 
 # Définir le répertoire de travail
 WORKDIR /app
 
 # Copier les fichiers nécessaires pour installer les dépendances
-COPY package*.json ./
+COPY package.json ./
 
 # Installer les dépendances
 RUN npm install
