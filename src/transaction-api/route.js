@@ -4,12 +4,6 @@ const axios = require("axios");
 
 const walletAdress = process.env.WALLET_ADDRESS;
 
-router.get("/wallet", async (req, res) => {
-  return res.json({
-    address: walletAdress,
-  });
-});
-
 router.get(`/get_data/:address`, async (req, res) => {
 
   const authHeader = req.headers['authorization']; // Récupère l'en-tête Authorization
@@ -44,6 +38,7 @@ router.get(`/get_data/:address`, async (req, res) => {
         };
       });
     }
+
 
     const ethPricePromises = tabs_timestamp_and_ethQuantity.map(async (t) => {
       const ethPriceUrl = `https://min-api.cryptocompare.com/data/pricehistorical?fsym=ETH&tsyms=EUR&ts=${t.timestamp}&api_key=${process.env.CRYPTOCOMPARE_API_KEY}`;

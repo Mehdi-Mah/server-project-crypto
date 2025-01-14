@@ -13,14 +13,13 @@ const authRoutes = require("./src/auth-api/route");
 app.use(express.json());
 
 const corsOptions = {
-  origin: 'http://localhost:3000',
+  origin: "http://localhost:3000",
   credentials: true,
 };
 app.use(cors(corsOptions));
 
 app.use("/api/v1/user", walletRoutes);
 app.use("/api/v1/auth", authRoutes);
-app.use("/api/v1/auth/login", authRoutes);
 
 // Démarrer le serveur
 app.listen(PORT, () => {
