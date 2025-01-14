@@ -4,106 +4,143 @@ const axios = require("axios");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { accessTokenSecret, refreshTokenSecret } = require("../constante/const");
+const { PrismaClient } = require("@prisma/client");
 
-const fakeUser = {
-  email: "houenoujohannes60@gmail.com",
-  password: "johannes",
-};
+const prisma = new PrismaClient();
+
+let refreshTokens = [];
 
 const walletAdress = process.env.WALLET_ADDRESS;
 
 const newWalletAdress = process.env.NEW_WALLET_ADDRESS;
 
 router.get("/profile/get_wallet", async (req, res) => {
-  // recuperer l'adresse de la db plus tard
+  try {
+    const { email } = req.query;
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
 
-  return res.json({
-    wallet: walletAdress,
-  });
+    if (!user) {
+      return res.status(404).json({ message: "Utilisateur non trouvé" });
+    }
+
+    return res.json({ wallet: user.wallet });
+  } catch (error) {
+    console.error("Erreur lors de la récupération du portefeuille :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
 });
 
+// Mettre à jour l'adresse du portefeuille
 router.put("/profile/update_wallet", async (req, res) => {
-  // update wallet dans la db plus tard
+  try {
+    const { email, wallet } = req.body;
 
-  const { wallet } = req.body;
-  console.log("wallet updated", wallet);
+    const updatedUser = await prisma.user.update({
+      where: { email },
+      data: { wallet },
+    });
 
-  return res.json({
-    wallet: wallet,
-  });
+    return res.json({ wallet: updatedUser.wallet });
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour du portefeuille :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
 });
 
-let refreshTokens = []; // a mettre dans la db plus tard
 
 router.post("/register", async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  // register fake user
+    const hashedPassword = await bcrypt.hash(password, 10);
 
-  return res.json({
-    message: "Utilisateur enregistré avec succès",
-    user: { fakeUser },
-  });
+    const user = await prisma.user.create({
+      data: {
+        email,
+        password: hashedPassword,
+        wallet: walletAdress,
+      },
+    });
 
-  // saving user in database with prisma
+    res.status(201).json({ message: "Utilisateur créé avec succès", user });
+  } catch (error) {
+    console.error("Erreur lors de l'inscription :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
 });
 
+// Connexion (Login)
 router.post("/login", async (req, res) => {
-  const { email, password } = req.body;
+  try {
+    const { email, password } = req.body;
 
-  const user = fakeUser.email === email ? fakeUser : null;
-  if (!user) return res.status(401).json({ message: "Utilisateur non trouvé" });
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
 
-  // Vérifie le mot de passe
-  const isPasswordValid = password === user.password;
-  if (!isPasswordValid)
-    return res.status(401).json({ message: "Mot de passe incorrect" });
-
-  const accessToken = jwt.sign(
-    { id: user.id, email: user.email },
-    accessTokenSecret,
-    {
-      expiresIn: "15m",
+    if (!user) {
+      return res.status(401).json({ message: "Utilisateur non trouvé" });
     }
-  );
-  const refreshToken = jwt.sign(
-    { id: user.id, email: user.email },
-    refreshTokenSecret,
-    {
-      expiresIn: "7d",
+
+    // Vérifier le mot de passe
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res.status(401).json({ message: "Mot de passe incorrect" });
     }
-  );
 
-  refreshTokens.push(refreshToken);
+    // Générer les tokens
+    const accessToken = jwt.sign(
+      { id: user.id, email: user.email },
+      accessTokenSecret,
+      { expiresIn: "15m" }
+    );
+    const refreshToken = jwt.sign(
+      { id: user.id, email: user.email },
+      refreshTokenSecret,
+      { expiresIn: "7d" }
+    );
 
-  res.json({
-    accessToken,
-    refreshToken,
-  });
+    refreshTokens.push(refreshToken);
+
+    res.json({ accessToken, refreshToken });
+  } catch (error) {
+    console.error("Erreur lors de la connexion :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
 });
 
+// Rafraîchir le token
 router.post("/refresh", (req, res) => {
   const { token } = req.body;
 
   if (!token) return res.status(401).json({ message: "Token manquant" });
-  if (!refreshTokens.includes(token))
+  if (!refreshTokens.includes(token)) {
     return res.status(403).json({ message: "Token invalide" });
+  }
 
-  // Génère un nouveau access token
-  const accessToken = jwt.sign(
-    { id: user.id, email: user.email },
-    accessTokenSecret,
-    {
-      expiresIn: "15m",
-    }
-  );
+  // Vérifier et générer un nouveau token
+  try {
+    const payload = jwt.verify(token, refreshTokenSecret);
+    const accessToken = jwt.sign(
+      { id: payload.id, email: payload.email },
+      accessTokenSecret,
+      { expiresIn: "15m" }
+    );
 
-  res.json({ accessToken });
+    res.json({ accessToken });
+  } catch (error) {
+    console.error("Erreur lors du rafraîchissement du token :", error);
+    res.status(403).json({ message: "Token invalide" });
+  }
 });
 
+// Déconnexion
 router.delete("/logout", (req, res) => {
-  //   const { token } = req.body;
-  //   refreshTokens = refreshTokens.filter((t) => t !== token);
+  const { token } = req.body;
+
+  refreshTokens = refreshTokens.filter((t) => t !== token);
   res.json({ message: "Déconnecté avec succès" });
 });
 
