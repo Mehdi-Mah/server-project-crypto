@@ -1,28 +1,26 @@
-const express = require('express');
-const { PrismaClient } = require('@prisma/client');
+const express = require("express");
+const { PrismaClient } = require("@prisma/client");
+const cors = require("cors");
 
 const prisma = new PrismaClient();
 const app = express();
+const PORT = process.env.PORT || 5000;
+
+const walletRoutes = require("./src/transaction-api/route");
+const authRoutes = require("./src/auth-api/route");
+
 app.use(express.json());
 
-app.get('/', (req, res) => {
-    res.send('Backend with Prisma is running.');
-});
+const corsOptions = {
+  origin: "http://localhost:3000",
+  credentials: true,
+};
+app.use(cors(corsOptions));
 
-app.post('/users', async (req, res) => {
-    const { email, password } = req.body;
-    try {
-        const newUser = await prisma.user.create({
-            data: { email, password },
-        });
-        res.json(newUser);
-    } catch (error) {
-        res.status(500).json({ error: 'Error creating user' });
-    }
-});
+app.use("/api/v1/user", walletRoutes);
+app.use("/api/v1/auth", authRoutes);
 
-const PORT = process.env.PORT || 4000;
-
-app.listen(PORT, async () => {
-    console.log(`Server running on port ${PORT}`);
+// Démarrer le serveur
+app.listen(PORT, () => {
+  console.log(`Serveur démarré sur le port ${PORT}`);
 });
