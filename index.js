@@ -1,20 +1,28 @@
 const express = require('express');
-const dotenv = require('dotenv');
+const { PrismaClient } = require('@prisma/client');
 
-dotenv.config();
-
+const prisma = new PrismaClient();
 const app = express();
-const PORT = process.env.PORT || 5000;
-
-// Middleware pour parser les requêtes JSON
 app.use(express.json());
 
-// Exemple de route
 app.get('/', (req, res) => {
-    res.send('Bienvenue sur l\'API Node.js !');
+    res.send('Backend with Prisma is running.');
 });
 
-// Démarrer le serveur
-app.listen(PORT, () => {
-    console.log(`Serveur démarré sur le port ${PORT}`);
+app.post('/users', async (req, res) => {
+    const { email, password } = req.body;
+    try {
+        const newUser = await prisma.user.create({
+            data: { email, password },
+        });
+        res.json(newUser);
+    } catch (error) {
+        res.status(500).json({ error: 'Error creating user' });
+    }
+});
+
+const PORT = process.env.PORT || 4000;
+
+app.listen(PORT, async () => {
+    console.log(`Server running on port ${PORT}`);
 });
