@@ -3,7 +3,6 @@ const router = express.Router();
 const axios = require("axios");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { accessTokenSecret, refreshTokenSecret } = require("../constante/const");
 const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
@@ -83,7 +82,6 @@ router.post("/login", async (req, res) => {
   }
 });
 
-
 // Rafraîchir le token
 router.post("/refresh_token", async (req, res) => {
   try {
@@ -145,7 +143,6 @@ router.post("/refresh_token", async (req, res) => {
       },
     });
 
-    // Réponse avec les nouveaux tokens
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,
       secure: true,
@@ -192,7 +189,6 @@ router.get("/profile/get_wallet", async (req, res) => {
   }
 });
 
-// Mettre à jour l'adresse du portefeuille
 router.put("/profile/update_wallet", async (req, res) => {
   try {
     const accessToken = req.headers.authorization.split(" ")[1];
@@ -200,7 +196,7 @@ router.put("/profile/update_wallet", async (req, res) => {
 
     const payload = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
 
-    console.log('payload', payload)
+    console.log("payload", payload);
 
     const updatedUser = await prisma.user.update({
       where: {
@@ -223,9 +219,8 @@ router.put("/profile/update_wallet", async (req, res) => {
 
 // Déconnexion
 router.delete("/logout", (req, res) => {
-  // const { token } = req.body;
-
-  // refreshTokens = refreshTokens.filter((t) => t !== token);
+ 
+  res.clearCookie("refreshToken");
   res.json({ message: "Déconnecté avec succès" });
 });
 
