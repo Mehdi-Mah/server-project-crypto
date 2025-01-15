@@ -8,47 +8,9 @@ const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
 
-let refreshTokens = [];
+// let refreshTokens = [];
 
 const walletAdress = process.env.WALLET_ADDRESS;
-
-const newWalletAdress = process.env.NEW_WALLET_ADDRESS;
-
-router.get("/profile/get_wallet", async (req, res) => {
-  try {
-    const { email } = req.query;
-    const user = await prisma.user.findUnique({
-      where: { email },
-    });
-
-    if (!user) {
-      return res.status(404).json({ message: "Utilisateur non trouvé" });
-    }
-
-    return res.json({ wallet: user.wallet });
-  } catch (error) {
-    console.error("Erreur lors de la récupération du portefeuille :", error);
-    res.status(500).json({ message: "Erreur serveur" });
-  }
-});
-
-// Mettre à jour l'adresse du portefeuille
-router.put("/profile/update_wallet", async (req, res) => {
-  try {
-    const { email, wallet } = req.body;
-
-    const updatedUser = await prisma.user.update({
-      where: { email },
-      data: { wallet },
-    });
-
-    return res.json({ wallet: updatedUser.wallet });
-  } catch (error) {
-    console.error("Erreur lors de la mise à jour du portefeuille :", error);
-    res.status(500).json({ message: "Erreur serveur" });
-  }
-});
-
 
 router.post("/register", async (req, res) => {
   try {
@@ -64,6 +26,7 @@ router.post("/register", async (req, res) => {
       },
     });
 
+    console.log("user", user);
     res.status(201).json({ message: "Utilisateur créé avec succès", user });
   } catch (error) {
     console.error("Erreur lors de l'inscription :", error);
@@ -102,11 +65,69 @@ router.post("/login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
-    refreshTokens.push(refreshToken);
+    await prisma.refreshToken.create({
+      data: {
+        token: refreshToken,
+        expiredAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
 
     res.json({ accessToken, refreshToken });
   } catch (error) {
     console.error("Erreur lors de la connexion :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+});
+
+router.get("/profile/get_wallet", async (req, res) => {
+  try {
+    const authorization = req.headers.authorization;
+    if (!authorization) {
+      return res.status(401).json({ message: "Authorization header missing" });
+    }
+
+    const token = authorization.split(" ")[1];
+    if (!token) {
+      return res.status(401).json({ message: "Token missing" });
+    }
+
+    const payload = jwt.verify(token, accessTokenSecret);
+
+    console.log("payload", payload);
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: payload.id,
+      },
+      select: {
+        wallet: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "Utilisateur introuvable" });
+    }
+
+    return res.json({ wallet: user.wallet });
+  } catch (error) {
+    console.error("Erreur lors de la récupération du portefeuille :", error);
+    return res.status(500).json({ message: "Erreur serveur" });
+  }
+});
+
+// Mettre à jour l'adresse du portefeuille
+router.put("/profile/update_wallet", async (req, res) => {
+  try {
+    const { email, wallet } = req.body;
+
+    const updatedUser = await prisma.user.update({
+      where: { email },
+      data: { wallet },
+    });
+
+    return res.json({ wallet: updatedUser.wallet });
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour du portefeuille :", error);
     res.status(500).json({ message: "Erreur serveur" });
   }
 });
