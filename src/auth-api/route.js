@@ -26,7 +26,6 @@ router.post("/register", async (req, res) => {
       },
     });
 
-    console.log("user", user);
     res.status(201).json({ message: "Utilisateur créé avec succès", user });
   } catch (error) {
     console.error("Erreur lors de l'inscription :", error);
@@ -44,24 +43,24 @@ router.post("/login", async (req, res) => {
     });
 
     if (!user) {
-      return res.status(401).json({ message: "Utilisateur non trouvé" });
+      return res.status(400).json({ message: "Utilisateur non trouvé" });
     }
 
     // Vérifier le mot de passe
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(401).json({ message: "Mot de passe incorrect" });
+      return res.status(400).json({ message: "Utilisateur non trouvé" });
     }
 
     // Générer les tokens
     const accessToken = jwt.sign(
       { id: user.id, email: user.email },
-      accessTokenSecret,
+      process.env.ACCESS_TOKEN_SECRET,
       { expiresIn: "15m" }
     );
     const refreshToken = jwt.sign(
       { id: user.id, email: user.email },
-      refreshTokenSecret,
+      process.env.REFRESH_TOKEN_SECRET,
       { expiresIn: "7d" }
     );
 
@@ -72,9 +71,89 @@ router.post("/login", async (req, res) => {
       },
     });
 
-    res.json({ accessToken, refreshToken });
+    res.cookie("refreshToken", refreshToken, {
+      httpOnly: true,
+      secure: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    res.json({ accessToken });
   } catch (error) {
     console.error("Erreur lors de la connexion :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+});
+
+
+// Rafraîchir le token
+router.post("/refresh_token", async (req, res) => {
+  try {
+    const refreshToken = req.cookies.refreshToken;
+
+    if (!refreshToken) {
+      return res.status(403).json({ message: "Refresh token manquant" });
+    }
+
+    // Vérification de l'existence en base
+    const storedToken = await prisma.refreshToken.findUnique({
+      where: { token: refreshToken },
+    });
+
+    if (!storedToken) {
+      return res.status(403).json({ message: "Token invalide ou révoqué" });
+    }
+
+    // Vérification de la validité du token
+    let payload;
+    try {
+      payload = jwt.verify(refreshToken, process.env.REFRESH_TOKEN_SECRET);
+    } catch (err) {
+      if (err.name === "TokenExpiredError") {
+        return res.status(403).json({ message: "Token expiré" });
+      }
+      return res.status(403).json({ message: "Token invalide" });
+    }
+
+    // Vérification de l'utilisateur
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+    });
+
+    if (!user) {
+      return res.status(403).json({ message: "Utilisateur non trouvé" });
+    }
+
+    // Génération d'un nouvel access token
+    const newAccessToken = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: "15m" }
+    );
+
+    // régénération du refresh token
+    const newRefreshToken = jwt.sign(
+      { id: user.id, email: user.email },
+      process.env.REFRESH_TOKEN_SECRET,
+      { expiresIn: "7d" }
+    );
+
+    // Mise à jour du refresh token en base
+    await prisma.refreshToken.update({
+      where: { token: refreshToken },
+      data: {
+        token: newRefreshToken,
+        expiredAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    // Réponse avec les nouveaux tokens
+    res.cookie("refreshToken", newRefreshToken, {
+      httpOnly: true,
+      secure: true,
+      maxAge: 7 * 24 * 60 * 60 * 1000,
+    });
+    res.json({ accessToken: newAccessToken });
+  } catch (error) {
+    console.error("Erreur lors du rafraîchissement du token :", error);
     res.status(500).json({ message: "Erreur serveur" });
   }
 });
@@ -91,9 +170,7 @@ router.get("/profile/get_wallet", async (req, res) => {
       return res.status(401).json({ message: "Token missing" });
     }
 
-    const payload = jwt.verify(token, accessTokenSecret);
-
-    console.log("payload", payload);
+    const payload = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
 
     const user = await prisma.user.findUnique({
       where: {
@@ -118,11 +195,23 @@ router.get("/profile/get_wallet", async (req, res) => {
 // Mettre à jour l'adresse du portefeuille
 router.put("/profile/update_wallet", async (req, res) => {
   try {
-    const { email, wallet } = req.body;
+    const accessToken = req.headers.authorization.split(" ")[1];
+    const { wallet } = req.body;
+
+    const payload = jwt.verify(accessToken, process.env.ACCESS_TOKEN_SECRET);
+
+    console.log('payload', payload)
 
     const updatedUser = await prisma.user.update({
-      where: { email },
-      data: { wallet },
+      where: {
+        id: payload.id,
+      },
+      data: {
+        wallet,
+      },
+      select: {
+        wallet: true,
+      },
     });
 
     return res.json({ wallet: updatedUser.wallet });
@@ -132,36 +221,11 @@ router.put("/profile/update_wallet", async (req, res) => {
   }
 });
 
-// Rafraîchir le token
-router.post("/refresh", (req, res) => {
-  const { token } = req.body;
-
-  if (!token) return res.status(401).json({ message: "Token manquant" });
-  if (!refreshTokens.includes(token)) {
-    return res.status(403).json({ message: "Token invalide" });
-  }
-
-  // Vérifier et générer un nouveau token
-  try {
-    const payload = jwt.verify(token, refreshTokenSecret);
-    const accessToken = jwt.sign(
-      { id: payload.id, email: payload.email },
-      accessTokenSecret,
-      { expiresIn: "15m" }
-    );
-
-    res.json({ accessToken });
-  } catch (error) {
-    console.error("Erreur lors du rafraîchissement du token :", error);
-    res.status(403).json({ message: "Token invalide" });
-  }
-});
-
 // Déconnexion
 router.delete("/logout", (req, res) => {
-  const { token } = req.body;
+  // const { token } = req.body;
 
-  refreshTokens = refreshTokens.filter((t) => t !== token);
+  // refreshTokens = refreshTokens.filter((t) => t !== token);
   res.json({ message: "Déconnecté avec succès" });
 });
 
