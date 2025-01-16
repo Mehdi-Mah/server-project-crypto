@@ -5,12 +5,10 @@ const axios = require("axios");
 const walletAdress = process.env.WALLET_ADDRESS;
 
 router.get(`/get_data/:address`, async (req, res) => {
-
-  const authHeader = req.headers['authorization']; // Récupère l'en-tête Authorization
+  const authHeader = req.headers["authorization"];
   if (authHeader) {
-      const token = authHeader.split(' ')[1]; // Supprime "Bearer" et conserve uniquement le token
-      req.token = token; // Stocke le token pour utilisation ultérieure
-      console.log(token);
+    const token = authHeader.split(" ")[1];
+    req.token = token;
   }
 
   const { address } = req.params;
@@ -39,16 +37,16 @@ router.get(`/get_data/:address`, async (req, res) => {
       });
     }
 
-
     const ethPricePromises = tabs_timestamp_and_ethQuantity.map(async (t) => {
       const ethPriceUrl = `https://min-api.cryptocompare.com/data/pricehistorical?fsym=ETH&tsyms=EUR&ts=${t.timestamp}&api_key=${process.env.CRYPTOCOMPARE_API_KEY}`;
       const ethPriceResponse = await axios.get(ethPriceUrl);
       const date = new Date(t.timestamp * 1000).toLocaleDateString("fr-FR");
-    return {
-      date: date,
-      price: Number((ethPriceResponse.data.ETH.EUR * t.ethQuantity).toFixed(2)),
-    };
-
+      return {
+        date: date,
+        price: Number(
+          (ethPriceResponse.data.ETH.EUR * t.ethQuantity).toFixed(2)
+        ),
+      };
     });
 
     const result = await Promise.all(ethPricePromises);
