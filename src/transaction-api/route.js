@@ -69,21 +69,21 @@ router.get(`/get_data/:address`, async (req, res) => {
       }
     }
 
-    // Récupérer le solde actuel via l'API Etherscan
+    // Récupérer le solde actuel via l'API Etherscan (en Wei)
     const balanceUrl = `https://api.etherscan.io/api?module=account&action=balance&address=${address}&tag=latest&apikey=${apiKey}`;
     const balanceResponse = await axios.get(balanceUrl);
     const currentBalanceInWei = BigInt(balanceResponse.data.result);
 
-    // Comparer les soldes
+    // Comparer les soldes en Wei
     const calculatedBalanceWei = balance.toString(); // Solde calculé en Wei
     const currentBalanceWei = currentBalanceInWei.toString(); // Solde actuel en Wei
     const match = calculatedBalanceWei === currentBalanceWei;
 
     // Retourner les résultats en Wei
     res.json({
-      calculatedBalanceWei,
-      currentBalanceWei,
-      match,
+      calculatedBalanceWei, // Solde calculé en Wei
+      currentBalanceWei,   // Solde actuel en Wei
+      match,               // Les soldes correspondent-ils ?
       transactions: allTransactions
     });
   } catch (error) {
