@@ -27,6 +27,7 @@ router.post("/register", async (req, res) => {
         email,
         password: hashedPassword,
         wallet: walletAdress,
+        validateAccount: false
       },
     });
 
@@ -295,7 +296,7 @@ router.delete("/logout", (req, res) => {
   res.json({ message: "Déconnecté avec succès" });
 
   // Delete refresh token from db
-  const cookie = req.cookies.refreshToken;
+  //const cookie = req.cookies.refreshToken;
   
 });
 
