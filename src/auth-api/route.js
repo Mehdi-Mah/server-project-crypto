@@ -155,6 +155,68 @@ router.post("/refresh_token", async (req, res) => {
   }
 });
 
+// Vérification de l'email
+router.post("/verify-email", async (req, res) => {
+  try {
+    const { token } = req.body;
+
+    console.log(token);
+
+    if (!token) {
+      return res.status(400).json({ message: "Token manquant" });
+    }
+
+    let payload;
+    try {
+      payload = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    } catch (err) {
+      return res.status(400).json({ message: "Token invalide" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: { id: payload.id },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Utilisateur non trouvé" });
+    }
+
+    res.json({ message: "Email vérifié avec succès", isEmailVerified: true });
+  } catch (error) {
+    console.error("Erreur lors de la vérification de l'email :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+});
+
+// Mot de passe oublié
+router.post("/forgot_password", async (req, res) => {
+  try {
+    const { email, newPassword } = req.body;
+
+    console.log(email, newPassword);
+
+    const user = await prisma.user.findUnique({
+      where: { email },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Utilisateur non trouvé" });
+    }
+
+    const hashedPassword = await bcrypt.hash(newPassword, 10);
+
+    await prisma.user.update({
+      where: { email },
+      data: { password: hashedPassword },
+    });
+
+    res.json({ message: "Mot de passe mis à jour avec succès" });
+  } catch (error) {
+    console.error("Erreur lors de la mise à jour du mot de passe :", error);
+    res.status(500).json({ message: "Erreur serveur" });
+  }
+});
+
 router.get("/profile/get_wallet", async (req, res) => {
   try {
     const authorization = req.headers.authorization;
