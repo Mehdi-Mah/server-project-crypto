@@ -27,6 +27,7 @@ router.post("/register", async (req, res) => {
         email,
         password: hashedPassword,
         wallet: walletAdress,
+        validateAccount: false,
       },
     });
 
@@ -79,7 +80,7 @@ router.post("/login", async (req, res) => {
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: true,
-      sameSite: strict, // check if necessary
+      sameSite: "strict", // check if necessary
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     res.json({ accessToken });
