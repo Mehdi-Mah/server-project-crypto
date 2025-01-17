@@ -3,7 +3,6 @@ const router = express.Router();
 const axios = require("axios");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
-const { accessTokenSecret, refreshTokenSecret } = require("../utils/const");
 const { PrismaClient } = require("@prisma/client");
 
 const prisma = new PrismaClient();
@@ -19,6 +18,7 @@ const walletAdress = process.env.WALLET_ADDRESS;
 router.post("/register", async (req, res) => {
   try {
     const { email, password, walletAdress } = req.body;
+    // TODO: check password complexity
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -27,7 +27,7 @@ router.post("/register", async (req, res) => {
         email,
         password: hashedPassword,
         wallet: walletAdress,
-        validateAccount: false
+        validateAccount: false,
       },
     });
 
@@ -80,10 +80,16 @@ router.post("/login", async (req, res) => {
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: true,
-      sameSite: "strict", // check if necessary
+      sameSite: "strict",
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
-    res.json({ accessToken, refreshToken, userEmail: user.email });
+    res.json({
+      accessToken,
+      user: {
+        email: user.email,
+        validateAccount: user.validateAccount,
+      },
+    });
   } catch (error) {
     console.error("Erreur lors de la connexion :", error);
     res.status(500).json({ message: "Erreur serveur" });
@@ -143,7 +149,7 @@ router.post("/refresh_token", async (req, res) => {
     );
 
     // Mise à jour du refresh token en base
-    await prisma.refreshToken.update({ 
+    await prisma.refreshToken.update({
       where: { token: refreshToken },
       data: {
         token: newRefreshToken, //atention hash token before saving in db
@@ -291,13 +297,11 @@ router.put("/profile/update_wallet", async (req, res) => {
 
 // Déconnexion
 router.delete("/logout", (req, res) => {
- 
   res.clearCookie("refreshToken");
   res.json({ message: "Déconnecté avec succès" });
 
   // Delete refresh token from db
-  //const cookie = req.cookies.refreshToken;
-  
+  // const cookie = req.cookies.refreshToken;
 });
 
 module.exports = router;
