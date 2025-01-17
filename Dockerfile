@@ -4,11 +4,14 @@ FROM node:20
 # Définir le répertoire de travail
 WORKDIR /app
 
-# Copier les fichiers nécessaires pour installer les dépendances
-COPY package.json ./
+# Copier uniquement les fichiers package.json et package-lock.json pour installer les dépendances
+COPY package.json package-lock.json ./
 
 # Installer les dépendances
 RUN npm install
+
+# Installer nodemon globalement pour un rechargement automatique
+RUN npm install -g nodemon
 
 # Copier le reste des fichiers de l'application
 COPY . .
@@ -19,5 +22,5 @@ RUN npx prisma generate
 # Exposer le port utilisé par le backend
 EXPOSE 8080
 
-# Exécuter les migrations Prisma, puis démarrer le backend
-CMD ["sh", "-c", "npm run migrate && npm start"]
+# Utiliser nodemon pour démarrer l'application en mode dev
+CMD ["npm", "run", "dev"]  # Utilise npm run dev pour démarrer le serveur avec nodemon
