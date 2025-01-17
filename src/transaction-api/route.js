@@ -45,7 +45,6 @@ router.get(`/get_data/:userEmail`, async (req, res) => {
       ...internalTxResponse.data.result,
     ].sort((a, b) => a.timeStamp - b.timeStamp); // Sort by timestamp
 
-    // Step 1: Determine the date range of transactions
     if (transactions.length === 0) {
       return res.json({ transactions: [] });
     }
@@ -53,45 +52,60 @@ router.get(`/get_data/:userEmail`, async (req, res) => {
     const earliestTimestamp = transactions[0].timeStamp;
     const latestTimestamp = transactions[transactions.length - 1].timeStamp;
 
-    const startDate = new Date(earliestTimestamp * 1000).toISOString().split('T')[0];
-    const endDate = new Date(latestTimestamp * 1000).toISOString().split('T')[0];
-
-    // Step 2: Fetch daily price data for the date range
-    const firstDate = Math.min(...transactions.map((entry) => entry.timeStamp)); // Earliest timestamp
-    const lastDate = Math.max(...transactions.map((entry) => entry.timeStamp)); // Latest timestamp
+    const firstDate = Math.min(...transactions.map((entry) => entry.timeStamp));
+    const lastDate = Math.max(...transactions.map((entry) => entry.timeStamp));
     const limit = Math.min(2000, Math.ceil((lastDate - firstDate) / (24 * 60 * 60)) + 1);
 
     const priceResponse = await axios.get('https://min-api.cryptocompare.com/data/v2/histoday', {
-        params: {
-            fsym: "ETH",
-            tsym: 'EUR',
-            limit,
-            toTs: lastDate,
-            api_key: process.env.CRYPTOCOMPARE_API_KEY,
-        },
+      params: {
+        fsym: "ETH",
+        tsym: 'EUR',
+        limit,
+        toTs: lastDate,
+        api_key: process.env.CRYPTOCOMPARE_API_KEY,
+      },
     });
 
-    const priceData = priceResponse.data.Data;
-    console.log(priceResponse.data)
+    const priceData = priceResponse.data.Data.Data;
 
-    // Step 4: Map balances to prices
-    const result = transactions.map((entry) => {
-        const date = new Date(entry.timeStamp * 1000).toISOString().split("T")[0];
-      
-        const priceEntry = priceData.find((p) => {
-            const priceDate = new Date(p.time * 1000).toISOString().split("T")[0];
-            return priceDate === date;
-        });
-        const price = priceEntry?.close || 0;
+    let cumulativeBalance = 0n; // Balance in Wei using BigInt
+    const result = [];
 
-        return {
-            date,
-            balance: entry.balance, // Wallet balance in Ether
-            price: entry.balance * price, // Wallet value in specified currency
-        };
+    for (const tx of transactions) {
+      const value = BigInt(tx.value);
+
+      if (tx.from.toLowerCase() === address.toLowerCase()) {
+        cumulativeBalance -= value;
+        if (tx.gasUsed && tx.gasPrice) {
+          const gasUsed = BigInt(tx.gasUsed);
+          const gasPrice = BigInt(tx.gasPrice);
+          const gasCost = gasUsed * gasPrice;
+          cumulativeBalance -= gasCost;
+        }
+      } else if (tx.to.toLowerCase() === address.toLowerCase()) {
+        cumulativeBalance += value;
+      }
+
+      const date = new Date(tx.timeStamp * 1000).toISOString().split("T")[0];
+      const priceEntry = priceData.find((p) => {
+        const priceDate = new Date(p.time * 1000).toISOString().split("T")[0];
+        return priceDate === date;
+      });
+      const price = priceEntry ? priceEntry.close : 0;
+
+      const balanceEth = parseFloat(cumulativeBalance) / 1e18;
+      const walletValueEur = balanceEth * price;
+
+      result.push({
+        date,
+        balance: balanceEth,
+        price: walletValueEur,
+      });
+    }
+
+    res.json({
+      data: result
     });
-
-    res.json(result);
 
   } catch (error) {
     console.error(error);
