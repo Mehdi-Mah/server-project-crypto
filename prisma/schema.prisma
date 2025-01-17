@@ -12,6 +12,7 @@ model User {
   email         String          @unique
   password      String
   wallet        String
+  validateAccount Boolean
 }
 
 model RefreshToken {
