@@ -13,7 +13,8 @@ router.get(`/get_data/:userEmail`, async (req, res) => {
   }
 
   const { userEmail } = req.params;
-  const address = await getUserWalletAddress(userEmail);
+  //const address = await getUserWalletAddress(userEmail);
+  const address = process.env.WALLET_ADDRESS;
 
   try {
     const externalTxResponse = await axios.get('https://api.etherscan.io/api', {
