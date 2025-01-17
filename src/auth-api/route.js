@@ -4,6 +4,7 @@ const axios = require("axios");
 const bcrypt = require("bcrypt");
 const jwt = require("jsonwebtoken");
 const { PrismaClient } = require("@prisma/client");
+const nodemailer = require("nodemailer");
 
 const prisma = new PrismaClient();
 
@@ -169,12 +170,87 @@ router.post("/refresh_token", async (req, res) => {
   }
 });
 
+// route pour l'envoie de l'email
+
+router.post("/send-email", async (req, res) => {
+  const { token } = req.body;
+
+  try {
+    if (!token) {
+      return res.status(400).json({ message: "Token manquant" });
+    }
+
+    let payload;
+
+    try {
+      payload = jwt.verify(token, process.env.ACCESS_TOKEN_SECRET);
+    } catch (err) {
+      return res.status(400).json({ message: "Token invalide" });
+    }
+
+    const user = await prisma.user.findUnique({
+      where: {
+        id: payload.id,
+      },
+      select: {
+        id: true,
+        email: true,
+      },
+    });
+
+    if (!user) {
+      return res.status(400).json({ message: "Utilisateur non trouvé" });
+    }
+
+    const verificationToken = jwt.sign(
+      { id: user.id },
+      process.env.ACCESS_TOKEN_SECRET,
+      { expiresIn: "1h" }
+    );
+    const verifcationLink = `http://localhost:3000/verify-email/${verificationToken}`;
+
+    // Configurer le transport d'email
+    const transporter = nodemailer.createTransport({
+      host: "localhost",
+      port: 1025,
+      secure: false,
+    });
+
+    // send email
+
+    const sendEmail = async () => {
+      try {
+        const info = await transporter.sendMail({
+          from: '"CryptoScope" <no-reply@crypto-scope.com>',
+          to: user.email,
+          subject: "Vérification de votre adresse email",
+          html: `
+            <p>Bonjour,</p>
+            <p>Merci de vérifier votre adresse email en cliquant sur le lien ci-dessous :</p>
+            <a href="${verifcationLink}" style="color: red;">Vérifier mon email</a>
+            <p>Ce lien expirera dans 1 heure.</p>
+          `,
+        });
+        res
+          .status(200)
+          .json({ message: "Email de vérification envoyé avec succès" });
+        console.log("Email envoyé:", info.messageId);
+      } catch (error) {
+        console.error("Erreur lors de l'envoi de l'email :", error);
+        res.status(500).json({ message: "Erreur interne du serveur" });
+      }
+    };
+    sendEmail();
+  } catch (error) {
+    console.error("Erreur lors de l'envoie de l'email :", error);
+    res.status(500).json({ message: "Erreur interne du serveur" });
+  }
+});
+
 // Vérification de l'email
 router.post("/verify-email", async (req, res) => {
   try {
     const { token } = req.body;
-
-    console.log(token);
 
     if (!token) {
       return res.status(400).json({ message: "Token manquant" });
@@ -194,6 +270,11 @@ router.post("/verify-email", async (req, res) => {
     if (!user) {
       return res.status(400).json({ message: "Utilisateur non trouvé" });
     }
+
+    await prisma.user.update({
+      where: { id: user.id },
+      data: { validateAccount: true },
+    });
 
     res.json({ message: "Email vérifié avec succès", isEmailVerified: true });
   } catch (error) {
