@@ -9,11 +9,16 @@ const prisma = new PrismaClient();
 
 // let refreshTokens = [];
 
+if (!process.env.ACCESS_TOKEN_SECRET) {
+  throw new Error("ACCESS TOKEN SECRET is missing");
+}
+
 const walletAdress = process.env.WALLET_ADDRESS;
 
 router.post("/register", async (req, res) => {
   try {
     const { email, password } = req.body;
+    // TODO: check password complexity
 
     const hashedPassword = await bcrypt.hash(password, 10);
 
@@ -63,6 +68,7 @@ router.post("/login", async (req, res) => {
       { expiresIn: "7d" }
     );
 
+    //TODO: hash refresh token before saving in db
     await prisma.refreshToken.create({
       data: {
         token: refreshToken,
@@ -73,6 +79,7 @@ router.post("/login", async (req, res) => {
     res.cookie("refreshToken", refreshToken, {
       httpOnly: true,
       secure: true,
+      sameSite: strict, // check if necessary
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     res.json({ accessToken });
@@ -93,7 +100,7 @@ router.post("/refresh_token", async (req, res) => {
 
     // Vérification de l'existence en base
     const storedToken = await prisma.refreshToken.findUnique({
-      where: { token: refreshToken },
+      where: { token: refreshToken }, //atention hash token before saving in db
     });
 
     if (!storedToken) {
@@ -135,17 +142,17 @@ router.post("/refresh_token", async (req, res) => {
     );
 
     // Mise à jour du refresh token en base
-    await prisma.refreshToken.update({
+    await prisma.refreshToken.update({ 
       where: { token: refreshToken },
       data: {
-        token: newRefreshToken,
+        token: newRefreshToken, //atention hash token before saving in db
         expiredAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
       },
     });
 
     res.cookie("refreshToken", newRefreshToken, {
       httpOnly: true,
-      secure: true,
+      secure: true, //samesite strict
       maxAge: 7 * 24 * 60 * 60 * 1000,
     });
     res.json({ accessToken: newAccessToken });
@@ -209,6 +216,8 @@ router.post("/forgot_password", async (req, res) => {
       where: { email },
       data: { password: hashedPassword },
     });
+
+    //TODO: Delete all refresh token of user in the db on password change
 
     res.json({ message: "Mot de passe mis à jour avec succès" });
   } catch (error) {
@@ -284,6 +293,10 @@ router.delete("/logout", (req, res) => {
  
   res.clearCookie("refreshToken");
   res.json({ message: "Déconnecté avec succès" });
+
+  // Delete refresh token from db
+  const cookie = req.cookies.refreshToken;
+  
 });
 
 module.exports = router;
