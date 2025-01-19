@@ -211,9 +211,12 @@ router.post("/send-email", async (req, res) => {
 
     // Configurer le transport d'email
     const transporter = nodemailer.createTransport({
-      host: "localhost",
+      host: "0.0.0.0",
       port: 1025,
       secure: false,
+      tls: {
+        rejectUnauthorized: false,
+      },
     });
 
     // send email
