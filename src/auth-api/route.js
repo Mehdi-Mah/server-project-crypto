@@ -56,7 +56,10 @@ router.post("/login", async (req, res) => {
     }
 
     // Vérifiez si le compte est verrouillé
-    if (user.accountLockedUntil && new Date(user.accountLockedUntil) > new Date()) {
+    if (
+      user.accountLockedUntil &&
+      new Date(user.accountLockedUntil) > new Date()
+    ) {
       const remainingTime = Math.ceil(
         (new Date(user.accountLockedUntil) - new Date()) / 1000
       );
@@ -91,7 +94,9 @@ router.post("/login", async (req, res) => {
         data: { failedLoginAttempts: failedAttempts },
       });
 
-      return res.status(401).json({ message: "Email ou mot de passe incorrect" });
+      return res
+        .status(401)
+        .json({ message: "Email ou mot de passe incorrect" });
     }
 
     // Si la connexion est réussie, réinitialisez les compteurs d'échecs et déverrouillez le compte
@@ -425,12 +430,23 @@ router.put("/profile/update_wallet", async (req, res) => {
 });
 
 // Déconnexion
-router.delete("/logout", (req, res) => {
+router.delete("/logout", async (req, res) => {
+  const refreshToken = req.cookies.refreshToken;
+
+  if (!refreshToken) {
+    return res.status(400).json({ message: "Refresh token manquant" });
+  }
+
+  try {
+    await prisma.refreshToken.deleteMany({
+      where: { token: refreshToken },
+    });
+  } catch (error) {
+    console.error("Erreur lors de la suppression du refresh token :", error);
+  }
+
   res.clearCookie("refreshToken");
   res.json({ message: "Déconnecté avec succès" });
-
-  // Delete refresh token from db
-  // const cookie = req.cookies.refreshToken;
 });
 
 module.exports = router;
