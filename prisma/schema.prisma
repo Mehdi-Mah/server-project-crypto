@@ -13,6 +13,8 @@ model User {
   password      String
   wallet        String
   validateAccount Boolean
+  failedLoginAttempts Int       @default(0)
+  accountLockedUntil  DateTime?
 }
 
 model RefreshToken {

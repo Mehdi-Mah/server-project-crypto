@@ -41,6 +41,9 @@ router.post("/register", async (req, res) => {
 
 // Connexion (Login)
 router.post("/login", async (req, res) => {
+  const MAX_FAILED_ATTEMPTS = 3; // Nombre maximum de tentatives autorisées
+  const LOCK_TIME = 5 * 60 * 1000; // Durée de verrouillage en millisecondes (5 minutes)
+
   try {
     const { email, password } = req.body;
 
@@ -52,11 +55,53 @@ router.post("/login", async (req, res) => {
       return res.status(400).json({ message: "Utilisateur non trouvé" });
     }
 
+    // Vérifiez si le compte est verrouillé
+    if (user.accountLockedUntil && new Date(user.accountLockedUntil) > new Date()) {
+      const remainingTime = Math.ceil(
+        (new Date(user.accountLockedUntil) - new Date()) / 1000
+      );
+      return res.status(403).json({
+        message: `Compte verrouillé. Réessayez dans ${remainingTime} secondes.`,
+      });
+    }
+
     // Vérifier le mot de passe
     const isPasswordValid = await bcrypt.compare(password, user.password);
     if (!isPasswordValid) {
-      return res.status(400).json({ message: "Utilisateur non trouvé" });
+      const failedAttempts = user.failedLoginAttempts + 1;
+
+      // Si le nombre d'échecs atteint la limite, verrouillez le compte
+      if (failedAttempts >= MAX_FAILED_ATTEMPTS) {
+        const lockUntil = new Date(Date.now() + LOCK_TIME);
+        await prisma.user.update({
+          where: { email },
+          data: {
+            failedLoginAttempts: failedAttempts,
+            accountLockedUntil: lockUntil,
+          },
+        });
+        return res.status(403).json({
+          message: `Compte verrouillé après ${MAX_FAILED_ATTEMPTS} tentatives échouées. Réessayez dans 5 minutes.`,
+        });
+      }
+
+      // Sinon, mettez à jour le nombre d'échecs
+      await prisma.user.update({
+        where: { email },
+        data: { failedLoginAttempts: failedAttempts },
+      });
+
+      return res.status(401).json({ message: "Email ou mot de passe incorrect" });
     }
+
+    // Si la connexion est réussie, réinitialisez les compteurs d'échecs et déverrouillez le compte
+    await prisma.user.update({
+      where: { email },
+      data: {
+        failedLoginAttempts: 0,
+        accountLockedUntil: null,
+      },
+    });
 
     // Générer les tokens
     const accessToken = jwt.sign(
